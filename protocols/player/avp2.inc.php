@@ -1,0 +1,30 @@
+<?php
+  $header = array (
+              'name'   => array ('type' => 'string', 'length' => 32, 'width' => 70),
+              'score'  => array ('type' => 'int',    'length' => 5,  'width' => 15),
+              'ping'   => array ('type' => 'int',    'length' => 4,  'width' => 15)
+            );
+
+  while (($setting = read_string ($result, "\\")) != "") {
+    if ((strtolower ($setting)) == "queryid") {
+      read_string ($result, "\\");
+
+      continue;
+    } elseif ((strtolower ($setting)) == "final") {
+      break;
+    };
+
+    if (preg_match ("/player_([\d]{1,2})/i", $setting, $count)) {
+      $player[$count[1]]         = array ();
+
+      $player[$count[1]]['name'] = preg_replace ("/^[\d]+~/", "",
+                                                 read_string ($result, "\\"));
+    } elseif (preg_match ("/score_([\d]{1,2})/i", $setting, $count)) {
+      $player[$count[1]]['score'] = read_string ($result, "\\");
+    } elseif (preg_match ("/ping_([\d]{1,2})/i", $setting, $count)) {
+      $player[$count[1]]['ping'] = read_string ($result, "\\");
+    } else {
+      read_string ($result, "\\");
+    };
+  };
+?>

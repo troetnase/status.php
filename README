@@ -1,0 +1,11 @@
+Just unpack the whole thing into your web-directory and you're
+good to go - but only, if you have some php-extensions installed:
+
+- date
+- pcre
+- posix
+- sockets
+- mbstring
+
+To change the output-encoding just change the variable $ENCODING
+in the appropriate include-file.
