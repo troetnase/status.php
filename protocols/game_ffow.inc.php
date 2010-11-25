@@ -1,6 +1,5 @@
 <?php
   $protocol = "ffow";
-  $protocol = "hl2";
 
   $send     = chr (0xFF) . chr (0xFF) . chr (0xFF)
             . chr (0xFF) . "FLSQ";
