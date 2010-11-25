@@ -11,6 +11,104 @@
     die ("No master-information found!\n");
   };
 
+  function write (&$socket, $data = NULL) {
+    if (DEBUG === true) {
+      if (! @is_null ($data)) {
+        print ("Sending:\n{$data}");
+      };
+    };
+
+    $start = gettimeofday (true);
+
+    do {
+      $write  = array ($socket);
+
+      $read   = NULL;
+      $except = NULL;
+
+      $now    = gettimeofday (true);
+
+      $select = @socket_select ($read, $write, $except, 0);
+
+      if ($select === false) {
+        return false;
+      } elseif ($select > 0) {
+        if (strlen ($data) > 0) {
+          if ((@socket_write ($socket, $data)) !== false) {
+            return true;
+          };
+        } else {
+          return true;
+        };
+      } else {
+        usleep (50);
+      };
+    } while (($now - $start) < 2);
+
+    return false;
+  };
+
+  function read (&$socket) {
+    $data  = NULL;
+
+    $start = gettimeofday (true);
+
+    do {
+      $read   = array ($socket);
+
+      $write  = NULL;
+      $except = NULL;
+
+      $now    = gettimeofday (true);
+
+      $select = @socket_select ($read, $write, $except, 0);
+
+      if ($select === false) {
+        return false;
+      } elseif ($select > 0) {
+        $data = @socket_read ($socket, 16384);
+
+        if (DEBUG === true) {
+          print ("Response:\n{$data}");
+        };
+
+        return $data;
+      } else {
+        usleep (50);
+      };
+    } while (($now - $start) < 2);
+
+    return false;
+  };
+
+  function connect (&$socket, $address, $port) {
+    if (DEBUG === true) {
+      print ("Connecting to {$address}:{$port}\n");
+    };
+
+    @socket_set_option   ($socket,
+                          SOL_SOCKET, SO_SNDBUF, 16384);
+
+    @socket_set_option   ($socket,
+                          SOL_SOCKET, SO_RCVBUF, 16384);
+
+    @socket_set_nonblock ($socket);
+
+    $connect = @socket_connect ($socket, $address, $port);
+
+    if ($connect === false) {
+      if (@socket_last_error ($socket) == SOCKET_EINPROGRESS) {
+        if ((write ($socket)) === true) {
+          return true;
+        };
+      };
+    } else {
+      return true;
+    };
+
+    return false;
+  };
+
   function server_query (&$socket, $address, $port, $data,
                          $protocol, $ignore = NULL) {
     $output = NULL;
@@ -20,18 +118,21 @@
       print ("Port         : {$port}\n");
     };
 
-    @socket_set_option ($socket, SOL_SOCKET,
-                        SO_RCVBUF, 16384);
+    @socket_set_option   ($socket, SOL_SOCKET,
+                          SO_SNDBUF, 16384);
 
-    $counter = 0;
-    $start   = gettimeofday ();
-
-    $last    = false;
+    @socket_set_option   ($socket, SOL_SOCKET,
+                          SO_RCVBUF, 16384);
 
     @socket_set_nonblock ($socket);
 
-    @socket_sendto       ($socket, $data, strlen ($data),
-                          0, $address, $port);
+    $counter = 0;
+    $start   = gettimeofday (true);
+
+    $last    = false;
+
+    @socket_sendto ($socket, $data, strlen ($data),
+                    0, $address, $port);
 
     if (DEBUG === true) {
       @socket_getsockname ($socket, $addr, $source);
@@ -41,10 +142,7 @@
     };
 
     do {
-      $now  = gettimeofday ();
-
-      $usec = (($now['sec']  - $start['sec']) * 1000000)
-            + (($now['usec'] - $start['usec']));
+      $now  = gettimeofday     (true);
 
       $len  = @socket_recvfrom ($socket, $response,
                                 16384, 0, $src, $port);
@@ -63,7 +161,7 @@
       };
 
       usleep (50);
-    } while ($usec < 2000000);
+    } while (($now - $start) < 2);
 
     if (DEBUG === true) {
       print ("Packet-count : {$counter}\n");
@@ -73,7 +171,7 @@
       if (DEBUG === true) {
         $pid = posix_getpid ();
 
-        write_file ("/tmp/{$pid}.{$i}", $result[$i]);
+        write_file ("/tmp/{$pid}." . microtime (true) . ".{$i}", $result[$i]);
       };
 
       $output = mangle ($output, $result[$i], $protocol);
@@ -391,6 +489,37 @@
     return $value;
   };
 
+  function parse_bc2 (&$string) {
+    $size = read_unsigned ($string);
+
+    if ($size > 0) {
+      $value = substr ($string, 0, $size);
+    } else {
+      $value = NULL;
+    };
+
+    $string = substr ($string, $size + 1);
+
+    return $value;
+  };
+
+  function build_bc2 (&$request, &$sequence) {
+    foreach ($request as &$value) {
+      $value = unsigned_to_string (strlen ($value)) . $value . chr (0x00);
+    };
+
+    unset ($value);
+
+    $data = implode            ($request);
+
+    $size = unsigned_to_string (12 + strlen ($data));
+
+    $send = unsigned_to_string ($sequence++ & 0x3fffffff) . $size
+          . unsigned_to_string (count ($request))         . $data;
+
+    return $send;
+  };
+
   function status_add (&$status, $key, $value, $overwrite = false) {
     if (! @is_array ($status)) {
       $status = array ();
@@ -407,6 +536,14 @@
     };
 
     $rules[] = array ($key => $value);
+  };
+
+  function server_add (&$server, $entry) {
+    if (! @is_array ($server)) {
+      $server = array ();
+    };
+
+    $server[] = $entry;
   };
 
   function get_hl_time ($time) {
